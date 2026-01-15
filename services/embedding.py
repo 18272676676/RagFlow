@@ -68,18 +68,39 @@ class SentenceTransformerEmbedding(EmbeddingModel):
             cache_dir: 模型缓存目录（可选）
         """
         try:
-            from sentence_transformers import SentenceTransformer
+            import os
+            from pathlib import Path
 
             # 设置缓存目录
             if cache_dir:
-                import os
-                os.environ['HF_HOME'] = cache_dir
+                # 确保缓存目录存在
+                cache_path = Path(cache_dir).resolve()
+                cache_path.mkdir(parents=True, exist_ok=True)
 
-            self.model = SentenceTransformer(model_name)
+                # 设置多个 Hugging Face 相关环境变量
+                os.environ['HF_HOME'] = str(cache_path)
+                os.environ['HUGGINGFACE_HUB_CACHE'] = str(cache_path / 'hub')
+                os.environ['TRANSFORMERS_CACHE'] = str(cache_path / 'transformers')
+                os.environ['HF_DATASETS_CACHE'] = str(cache_path / 'datasets')
+
+                logger.info(f"设置模型缓存目录: {cache_path}")
+                logger.info(f"HF_HOME: {os.environ.get('HF_HOME')}")
+                logger.info(f"HUGGINGFACE_HUB_CACHE: {os.environ.get('HUGGINGFACE_HUB_CACHE')}")
+
+            from sentence_transformers import SentenceTransformer
+
+            # 使用 cache_folder 参数直接指定缓存目录
+            if cache_dir:
+                self.model = SentenceTransformer(model_name, cache_folder=str(Path(cache_dir) / 'models'))
+            else:
+                self.model = SentenceTransformer(model_name)
+
             self._dimension = self.model.get_sentence_embedding_dimension()
             logger.info(f"加载 Embedding 模型成功: {model_name}, 维度: {self._dimension}")
-            if cache_dir:
-                logger.info(f"模型缓存目录: {cache_dir}")
+
+            # 打印实际使用的缓存路径
+            logger.info(f"模型缓存路径: {self.model._target_device}")
+
         except Exception as e:
             logger.error(f"加载 Embedding 模型失败: {e}")
             raise
