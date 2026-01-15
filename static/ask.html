@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能问答 - RAG 知识库系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 700px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .question-input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            font-size: 16px;
+            resize: vertical;
+            min-height: 100px;
+            font-family: inherit;
+            transition: border-color 0.3s ease;
+        }
+
+        .question-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .top-k-input {
+            flex: 1;
+            padding: 10px 15px;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .top-k-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .answer-container {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .answer-container.active {
+            display: block;
+        }
+
+        .answer-label {
+            color: #666;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 10px;
+        }
+
+        .answer-content {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            line-height: 1.6;
+            color: #333;
+            white-space: pre-wrap;
+        }
+
+        .sources-container {
+            margin-top: 20px;
+            display: none;
+        }
+
+        .sources-container.active {
+            display: block;
+        }
+
+        .sources-label {
+            color: #666;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 10px;
+        }
+
+        .sources-list {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .source-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            background: white;
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+
+        .source-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .source-icon {
+            font-size: 20px;
+            margin-right: 10px;
+        }
+
+        .source-info {
+            flex: 1;
+        }
+
+        .source-name {
+            font-weight: 500;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .source-meta {
+            color: #999;
+            font-size: 12px;
+        }
+
+        .link {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .link a {
+            color: #667eea;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>智能问答</h1>
+        <p class="subtitle">基于知识库回答您的问题</p>
+
+        <textarea
+            class="question-input"
+            id="questionInput"
+            placeholder="请输入您的问题..."
+        ></textarea>
+
+        <div class="controls">
+            <input
+                type="number"
+                class="top-k-input"
+                id="topKInput"
+                value="5"
+                min="1"
+                max="20"
+                placeholder="检索文档数量"
+            >
+            <button class="btn btn-primary" id="askBtn">提问</button>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>思考中，请稍候...</p>
+        </div>
+
+        <div class="answer-container" id="answerContainer">
+            <div class="answer-label">回答：</div>
+            <div class="answer-content" id="answerContent"></div>
+        </div>
+
+        <div class="sources-container" id="sourcesContainer">
+            <div class="sources-label">答案来源：</div>
+            <div class="sources-list" id="sourcesList"></div>
+        </div>
+
+        <div class="link">
+            <a href="upload.html">上传文档</a>
+        </div>
+    </div>
+
+    <script>
+        const questionInput = document.getElementById('questionInput');
+        const topKInput = document.getElementById('topKInput');
+        const askBtn = document.getElementById('askBtn');
+        const loading = document.getElementById('loading');
+        const answerContainer = document.getElementById('answerContainer');
+        const answerContent = document.getElementById('answerContent');
+        const sourcesContainer = document.getElementById('sourcesContainer');
+        const sourcesList = document.getElementById('sourcesList');
+
+        // 提问
+        askBtn.addEventListener('click', async () => {
+            const question = questionInput.value.trim();
+            const topK = parseInt(topKInput.value) || 5;
+
+            if (!question) {
+                alert('请输入您的问题');
+                return;
+            }
+
+            loading.classList.add('active');
+            askBtn.disabled = true;
+            answerContainer.classList.remove('active');
+            sourcesContainer.classList.remove('active');
+
+            try {
+                const response = await fetch('/api/qa/ask', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        question: question,
+                        top_k: topK
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    answerContent.textContent = data.answer;
+                    answerContainer.classList.add('active');
+
+                    // 显示来源
+                    if (data.sources && data.sources.length > 0) {
+                        sourcesList.innerHTML = data.sources.map(source => `
+                            <div class="source-item">
+                                <span class="source-icon">📄</span>
+                                <div class="source-info">
+                                    <div class="source-name">${escapeHtml(source.file_name)}</div>
+                                    <div class="source-meta">相似度: ${(source.similarity * 100).toFixed(2)}%</div>
+                                </div>
+                            </div>
+                        `).join('');
+                        sourcesContainer.classList.add('active');
+                    }
+                } else {
+                    alert(data.detail || '问答失败，请重试');
+                }
+            } catch (error) {
+                alert('网络错误，请检查网络连接');
+            } finally {
+                loading.classList.remove('active');
+                askBtn.disabled = false;
+            }
+        });
+
+        // 支持 Enter 提交（Ctrl+Enter）
+        questionInput.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'Enter') {
+                askBtn.click();
+            }
+        });
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

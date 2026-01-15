@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: rag-knowledge-base
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./.env:/app/.env
+    environment:
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=rag_user
+      - DB_PASSWORD=rag_password
+      - DB_NAME=rag_knowledge_base
+      - LOG_LEVEL=INFO
+    depends_on:
+      - mysql
+    restart: unless-stopped
+    networks:
+      - rag-network
+
+  mysql:
+    image: mysql:8.0
+    container_name: rag-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: rag_knowledge_base
+      MYSQL_USER: rag_user
+      MYSQL_PASSWORD: rag_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    restart: unless-stopped
+    networks:
+      - rag-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  rag-network:
+    driver: bridge
