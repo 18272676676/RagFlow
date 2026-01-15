@@ -10,6 +10,7 @@
 - 向量检索是 RAG 的核心能力
 - Embedding 模型需要统一封装，避免散落在各处
 - 批处理可以显著提升性能
+-
 """
 
 from typing import List
