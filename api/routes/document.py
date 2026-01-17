@@ -25,7 +25,7 @@ import mimetypes
 from RagFlow.core.database import get_db
 from RagFlow.core.logger import get_logger, set_request_id
 from RagFlow.core.auth import get_current_active_user
-from RagFlow.models.db_models import Document, User
+from RagFlow.models.db_models import Document, User, Chunk
 from RagFlow.models.document import DocumentResponse
 from RagFlow.services.knowledge_builder import KnowledgeBuilder
 from RagFlow.services.storage_service import get_storage_service
@@ -49,7 +49,7 @@ def get_knowledge_builder():
     return knowledge_builder
 
 
-@router.post("/upload", response_model=DocumentResponse)
+@router.post("/upload")
 async def upload_document(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_active_user),
@@ -170,10 +170,13 @@ async def upload_document(
     logger.info(f"========== 文档上传接口返回成功 ==========")
     logger.info(f"document_id={document.id}")
     logger.info(f"===========================================")
-    return document
+
+    # 返回格式化的文档信息
+    from RagFlow.models.document import format_document_response
+    return format_document_response(document)
 
 
-@router.get("", response_model=List[DocumentResponse])
+@router.get("")
 async def list_documents(
     status: str = None,
     skip: int = 0,
@@ -199,10 +202,14 @@ async def list_documents(
     documents = query.order_by(Document.created_at.desc()).offset(skip).limit(limit).all()
     logger.info(f"查询文档列表，数量: {len(documents)}")
 
-    return documents
+    # 转换为响应格式并添加格式化字段
+    from RagFlow.models.document import format_document_response
+    result = [format_document_response(doc) for doc in documents]
+
+    return result
 
 
-@router.get("/{document_id}", response_model=DocumentResponse)
+@router.get("/{document_id}")
 async def get_document(
     document_id: int,
     current_user: User = Depends(get_current_active_user),
@@ -219,7 +226,9 @@ async def get_document(
     if not document:
         raise HTTPException(status_code=404, detail="文档不存在")
 
-    return document
+    # 返回格式化的文档信息
+    from RagFlow.models.document import format_document_response
+    return format_document_response(document)
 
 
 @router.get("/{document_id}/download")
@@ -326,7 +335,6 @@ async def get_document_chunks(
         raise HTTPException(status_code=404, detail="文档不存在")
 
     # 查询所有切片
-    from RagFlow.models.db_models import Chunk
     chunks = db.query(Chunk).filter(Chunk.document_id == document_id).order_by(Chunk.chunk_index).all()
 
     chunk_list = [
