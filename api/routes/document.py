@@ -12,7 +12,7 @@
 - API 层隔离业务逻辑，提高可测试性
 """
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List
@@ -25,7 +25,7 @@ import mimetypes
 from RagFlow.core.database import get_db
 from RagFlow.core.logger import get_logger, set_request_id
 from RagFlow.core.auth import get_current_active_user
-from RagFlow.models.db_models import Document, User, Chunk
+from RagFlow.models.db_models import Document, User, Chunk, KnowledgeBase
 from RagFlow.models.document import DocumentResponse
 from RagFlow.services.knowledge_builder import KnowledgeBuilder
 from RagFlow.services.storage_service import get_storage_service
@@ -52,6 +52,7 @@ def get_knowledge_builder():
 @router.post("/upload")
 async def upload_document(
     file: UploadFile = File(...),
+    knowledge_base_id: int = Form(None),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -65,6 +66,10 @@ async def upload_document(
     4. 存储到向量库
 
     支持的文件格式: .txt, .md, .pdf, .docx
+
+    Args:
+        file: 上传的文件
+        knowledge_base_id: 知识库 ID（可选，如果不指定则不关联任何知识库）
     """
     set_request_id()
     logger.info(f"========== 开始上传文档 ==========")
@@ -113,6 +118,19 @@ async def upload_document(
 
     logger.info(f"文件大小验证通过")
 
+    # 验证知识库 ID（如果提供）
+    if knowledge_base_id is not None:
+        kb = db.query(KnowledgeBase).filter(
+            KnowledgeBase.id == knowledge_base_id,
+            KnowledgeBase.user_id == current_user.id
+        ).first()
+
+        if not kb:
+            logger.error(f"知识库不存在或无权访问: {knowledge_base_id}")
+            raise HTTPException(status_code=400, detail="知识库不存在或无权访问")
+
+        logger.info(f"文件将关联到知识库: {knowledge_base_id}")
+
     # 3. 创建文档记录
     file_id = uuid.uuid4().hex
     storage_path = f"{current_user.id}/{file_id}{file_ext}"
@@ -121,6 +139,7 @@ async def upload_document(
 
     document = Document(
         user_id=current_user.id,
+        knowledge_base_id=knowledge_base_id,
         file_name=file.filename,
         file_path=storage_path,
         file_size=len(content),

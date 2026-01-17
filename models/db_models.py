@@ -33,10 +33,33 @@ class User(Base):
     # 关系
     conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="user", cascade="all, delete-orphan")
+    knowledge_bases = relationship("KnowledgeBase", back_populates="user", cascade="all, delete-orphan")
 
     # 添加索引
     __table_args__ = (
         Index('idx_username', 'username'),
+    )
+
+
+class KnowledgeBase(Base):
+    """知识库表"""
+    __tablename__ = "knowledge_bases"
+
+    id = Column(Integer, primary_key=True, index=True, comment="知识库 ID")
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, comment="所属用户 ID")
+    name = Column(String(100), nullable=False, comment="知识库名称")
+    description = Column(Text, comment="知识库描述")
+    created_at = Column(DateTime, server_default=func.now(), comment="创建时间")
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), comment="更新时间")
+
+    # 关系
+    user = relationship("User", back_populates="knowledge_bases")
+    documents = relationship("Document", back_populates="knowledge_base", cascade="all, delete-orphan")
+
+    # 添加索引
+    __table_args__ = (
+        Index('idx_user_id', 'user_id'),
+        Index('idx_name', 'name'),
     )
 
 
@@ -88,6 +111,7 @@ class Document(Base):
 
     id = Column(Integer, primary_key=True, index=True, comment="文档 ID")
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, comment="上传用户 ID (可为空)")
+    knowledge_base_id = Column(Integer, ForeignKey("knowledge_bases.id"), nullable=True, comment="所属知识库 ID")
     file_name = Column(String(255), nullable=False, comment="文件名")
     file_path = Column(String(500), nullable=False, comment="文件存储路径")
     file_size = Column(Integer, nullable=False, comment="文件大小（字节）")
@@ -100,12 +124,14 @@ class Document(Base):
 
     # 关系
     user = relationship("User", back_populates="documents")
+    knowledge_base = relationship("KnowledgeBase", back_populates="documents")
     chunks = relationship("Chunk", back_populates="document", cascade="all, delete-orphan")
 
     # 添加索引
     __table_args__ = (
         Index('idx_file_name', 'file_name'),
         Index('idx_status', 'status'),
+        Index('idx_knowledge_base_id', 'knowledge_base_id'),
         Index('idx_created_at', 'created_at'),
     )
 

@@ -33,6 +33,7 @@ from RagFlow.api.routes.document import router as document_router
 from RagFlow.api.routes.qa import router as qa_router
 from RagFlow.api.routes.auth import router as auth_router, create_admin_user
 from RagFlow.api.routes.conversation import router as conversation_router
+from RagFlow.api.routes.knowledge_base import router as knowledge_base_router
 
 # 设置日志
 setup_logger(log_dir=settings.LOG_DIR, log_level=settings.LOG_LEVEL)
@@ -93,6 +94,7 @@ app.add_middleware(
 # 注册路由
 app.include_router(auth_router)
 app.include_router(conversation_router)
+app.include_router(knowledge_base_router)
 app.include_router(document_router)
 app.include_router(qa_router)
 
@@ -130,6 +132,14 @@ async def files_page():
     """文件管理页路由"""
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/static/upload.html", status_code=307)
+
+
+# 知识库详情页路由
+@app.get("/kb/{kb_id}")
+async def kb_detail_page(kb_id: int):
+    """知识库详情页路由"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url=f"/static/kb_detail.html?kb_id={kb_id}", status_code=307)
 
 
 # 健康检查

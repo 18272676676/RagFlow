@@ -3,537 +3,451 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>文件管理 - RAG 知识库系统</title>
+    <title>知识库管理 - RAG 知识库系统</title>
+    <link rel="stylesheet" href="/static/css/common.css">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        .kb-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 1.5rem;
         }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: #f5f7fa;
-            min-height: 100vh;
+        .kb-card {
+            position: relative;
+            padding: 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .kb-card:hover {
+            transform: translateY(-4px);
+        }
+
+        .kb-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: var(--radius);
+            background: linear-gradient(135deg, hsl(var(--gradient-from) / 0.1) 0%, hsl(var(--gradient-to) / 0.1) 100%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .kb-card:hover::before {
+            opacity: 1;
+        }
+
+        .kb-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .kb-icon-wrapper {
+            width: 56px;
+            height: 56px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, hsl(var(--gradient-from) / 0.15) 0%, hsl(var(--gradient-to) / 0.15) 100%);
             display: flex;
-            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+            font-size: 1.75rem;
+            transition: all 0.3s ease;
+        }
+
+        .kb-card:hover .kb-icon-wrapper {
+            background: linear-gradient(135deg, hsl(var(--gradient-from)) 0%, hsl(var(--gradient-to)) 100%);
+            transform: scale(1.1);
+        }
+
+        .kb-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: hsl(var(--foreground));
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .kb-description {
+            font-size: 0.875rem;
+            color: hsl(var(--muted-foreground));
+            margin-bottom: 1rem;
+            min-height: 2.5rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            line-height: 1.25;
+        }
+
+        .kb-meta {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 0.8125rem;
+            color: hsl(var(--muted-foreground));
+            padding-bottom: 0.75rem;
+            margin-bottom: 0.75rem;
+            border-bottom: 1px solid hsl(var(--border) / 0.5);
+        }
+
+        .kb-meta-item {
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+
+        .kb-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .kb-action-btn {
+            flex: 1;
+            padding: 0.5rem;
+            font-size: 0.8125rem;
+            border-radius: calc(var(--radius) - 2px);
+            border: 1px solid hsl(var(--border));
+            background: hsl(var(--background));
+            color: hsl(var(--foreground));
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .kb-action-btn:hover {
+            background: hsl(var(--accent));
+        }
+
+        .kb-action-btn.delete {
+            color: hsl(var(--destructive));
+            border-color: hsl(var(--destructive) / 0.2);
+        }
+
+        .kb-action-btn.delete:hover {
+            background: hsl(var(--destructive) / 0.1);
+        }
+
+        /* 模态框表单 */
+        .form-label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: hsl(var(--foreground));
+        }
+
+        .form-hint {
+            font-size: 0.75rem;
+            color: hsl(var(--muted-foreground));
+            margin-top: 0.25rem;
+        }
+
+        .modal-header {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 1.25rem;
+            color: hsl(var(--foreground));
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 0.75rem;
+            justify-content: flex-end;
+            margin-top: 1.5rem;
         }
 
         /* 顶部导航 */
-        .header {
-            background: white;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-            padding: 0 24px;
-            height: 60px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            z-index: 100;
-        }
-
-        .header h1 {
-            font-size: 20px;
+        .header-title {
+            font-size: 1.125rem;
             font-weight: 600;
-            color: #333;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, hsl(var(--gradient-from)) 0%, hsl(var(--gradient-to)) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
 
-        .header-actions {
-            display: flex;
-            gap: 12px;
-        }
-
-        .nav-btn {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 6px;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.2s;
-            background: #f0f0f0;
-            color: #333;
+        .nav-link {
+            padding: 0.5rem 1rem;
+            border-radius: calc(var(--radius) - 2px);
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: hsl(var(--muted-foreground));
             text-decoration: none;
+            transition: all 0.2s ease;
         }
 
-        .nav-btn:hover {
-            background: #e0e0e0;
+        .nav-link:hover {
+            color: hsl(var(--foreground));
+            background: hsl(var(--accent));
         }
 
-        .nav-btn.active {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+        .nav-link.active {
+            color: hsl(var(--primary-foreground));
+            background: linear-gradient(135deg, hsl(var(--gradient-from)) 0%, hsl(var(--gradient-to)) 100%);
         }
 
-        .nav-btn.logout {
-            background: #f8d7da;
-            color: #721c24;
+        .nav-link.logout {
+            color: hsl(var(--destructive));
         }
 
-        .nav-btn.logout:hover {
-            background: #f5c6cb;
+        .nav-link.logout:hover {
+            background: hsl(var(--destructive) / 0.1);
         }
 
-        /* 主内容区域 */
-        .main-container {
-            flex: 1;
-            padding: 24px;
-            overflow-y: auto;
-        }
-
-        .documents-header {
-            max-width: 1200px;
-            margin: 0 auto 24px;
+        /* 页面头部 */
+        .page-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            margin-bottom: 2rem;
         }
 
-        .documents-header h2 {
-            font-size: 24px;
-            color: #333;
-        }
-
-        .upload-btn {
-            padding: 12px 24px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .upload-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
-        }
-
-        .documents-grid {
-            max-width: 1200px;
-            margin: 0 auto;
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 20px;
-        }
-
-        .document-card {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-            transition: all 0.2s;
-        }
-
-        .document-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-        }
-
-        .document-icon {
-            font-size: 36px;
-            margin-bottom: 12px;
-        }
-
-        .document-name {
-            font-size: 14px;
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 8px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .document-meta {
-            font-size: 12px;
-            color: #999;
-            margin-bottom: 12px;
-        }
-
-        .document-status {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 500;
-        }
-
-        .document-status.completed {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .document-status.pending {
-            background: #fff3cd;
-            color: #856404;
-        }
-
-        .document-status.error {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        .document-actions {
-            display: flex;
-            gap: 8px;
-            margin-top: 12px;
-        }
-
-        .doc-action-btn {
-            flex: 1;
-            padding: 8px;
-            border: 1px solid #e1e8ed;
-            background: white;
-            border-radius: 6px;
-            font-size: 12px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .doc-action-btn:hover {
-            background: #f0f7ff;
-            border-color: #667eea;
-        }
-
-        .doc-action-btn.delete {
-            color: #dc3545;
-        }
-
-        .doc-action-btn.delete:hover {
-            background: #fff5f5;
-            border-color: #dc3545;
-        }
-
-        /* 隐藏的文件输入 */
-        #fileInput {
-            display: none;
-        }
-
-        /* Loading */
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 12px;
-        }
-
-        .loading.active {
-            display: block;
-        }
-
-        .spinner {
-            border: 2px solid #f3f3f3;
-            border-top: 2px solid #07c160;
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            animation: spin 0.8s linear infinite;
-            margin: 0 auto 8px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .loading p {
-            font-size: 12px;
-            color: #999;
-        }
-
-        /* 提示消息 */
-        .toast {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 16px 24px;
-            border-radius: 8px;
-            background: white;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-            z-index: 1000;
-            display: none;
-            animation: slideIn 0.3s ease;
-        }
-
-        @keyframes slideIn {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-
-        .toast.success {
-            border-left: 4px solid #28a745;
-        }
-
-        .toast.error {
-            border-left: 4px solid #dc3545;
-        }
-
-        .toast.info {
-            border-left: 4px solid #17a2b8;
+        .page-header-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: hsl(var(--foreground));
         }
     </style>
 </head>
 <body>
     <!-- 顶部导航 -->
     <header class="header">
-        <h1>RAG 知识库系统</h1>
-        <div class="header-actions">
-            <a href="/static/index.html" class="nav-btn">智能问答</a>
-            <a href="/static/upload.html" class="nav-btn active">文件管理</a>
-            <button class="nav-btn logout" id="logoutBtn">退出</button>
+        <h1 class="header-title">RAG 知识库系统</h1>
+        <div class="flex items-center gap-4">
+            <button class="theme-toggle" id="themeToggle" title="切换主题">
+                <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+            </button>
+            <a href="/static/index.html" class="nav-link">智能问答</a>
+            <a href="/static/upload.html" class="nav-link active">知识库管理</a>
+            <button class="nav-link logout" id="logoutBtn">退出</button>
         </div>
     </header>
 
     <!-- 主内容 -->
-    <div class="main-container">
-        <div class="documents-header">
-            <h2>我的文档</h2>
-            <button class="upload-btn" id="uploadBtn">上传文档</button>
-            <input type="file" id="fileInput" accept=".txt,.md,.pdf,.docx">
+    <main class="main-content">
+        <div class="page-header">
+            <h2 class="page-header-title">我的知识库</h2>
+            <button class="btn btn-primary" id="createKbBtn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                创建知识库
+            </button>
         </div>
-        <div class="documents-grid" id="documentsGrid">
-            <!-- 文档卡片将动态加载 -->
+        <div class="kb-grid" id="kbGrid">
+            <!-- 知识库卡片将动态加载 -->
+        </div>
+    </main>
+
+    <!-- 创建知识库弹窗 -->
+    <div class="modal-overlay hidden" id="createKbModal">
+        <div class="modal-content">
+            <div class="modal-header">创建知识库</div>
+            <div class="mb-4">
+                <label class="form-label" for="kbName">知识库名称 *</label>
+                <input type="text" id="kbName" class="input" placeholder="请输入知识库名称">
+                <p class="form-hint">最多 100 个字符</p>
+            </div>
+            <div class="mb-4">
+                <label class="form-label" for="kbDesc">描述（可选）</label>
+                <textarea id="kbDesc" class="textarea" placeholder="请输入知识库描述"></textarea>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" id="cancelCreateKb">取消</button>
+                <button class="btn btn-primary" id="confirmCreateKb">创建</button>
+            </div>
         </div>
     </div>
 
-    <!-- 提示消息 -->
-    <div class="toast" id="toast"></div>
+    <!-- Toast 提示 -->
+    <div class="toast hidden" id="toast">
+        <span id="toastMessage"></span>
+    </div>
 
+    <script src="/static/js/common.js"></script>
     <script>
-        // 获取 token
-        function getToken() {
-            return localStorage.getItem('access_token');
-        }
-
-        // 检查是否登录
-        function checkAuth() {
-            const token = getToken();
-            if (!token) {
-                window.location.href = '/static/login.html';
-                return false;
-            }
-            return true;
-        }
-
-        // 页面加载时检查认证
-        checkAuth();
-
-        const accessToken = getToken();
-        const apiConfig = {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`
-            }
-        };
-
-        // DOM 元素
-        const logoutBtn = document.getElementById('logoutBtn');
-        const uploadBtn = document.getElementById('uploadBtn');
-        const fileInput = document.getElementById('fileInput');
-        const documentsGrid = document.getElementById('documentsGrid');
-        const toast = document.getElementById('toast');
-
-        // 初始化
-        init();
-
-        async function init() {
-            await loadDocuments();
+        // 页面初始化
+        document.addEventListener('DOMContentLoaded', async () => {
+            await initTheme();
+            await loadKnowledgeBases();
             setupEventListeners();
-        }
+        });
 
-        // 设置事件监听
-        function setupEventListeners() {
-            logoutBtn.addEventListener('click', logout);
-            uploadBtn.addEventListener('click', () => fileInput.click());
-            fileInput.addEventListener('change', handleFileUpload);
-        }
-
-        // 加载文档列表
-        async function loadDocuments() {
+        // 加载知识库列表
+        async function loadKnowledgeBases() {
             try {
-                const response = await fetch('/api/documents', {
-                    headers: apiConfig.headers
+                const response = await fetch('/api/knowledge-bases', {
+                    headers: { 'Authorization': `Bearer ${getToken()}` }
                 });
-                const documents = await response.json();
+                const kbs = await response.json();
 
-                documentsGrid.innerHTML = documents.map(doc => `
-                    <div class="document-card">
-                        <div class="document-icon">${getFileIcon(doc.file_type)}</div>
-                        <div class="document-name" title="${escapeHtml(doc.file_name)}">${escapeHtml(doc.file_name)}</div>
-                        <div class="document-meta">
-                            ${doc.formatted_size || formatFileSize(doc.file_size)} · ${doc.formatted_created_at || formatDate(doc.created_at)}
-                        </div>
-                        <div class="document-meta">
-                            切片数量: ${doc.chunk_count} · ${doc.status_text || getStatusText(doc.status)}
-                        </div>
-                        <div class="document-status ${doc.status}">
-                            ${doc.status_text || getStatusText(doc.status)}
-                        </div>
-                        <div class="document-actions">
-                            <button class="doc-action-btn" onclick="downloadDocument(${doc.id})">下载</button>
-                            <button class="doc-action-btn delete" onclick="deleteDocument(${doc.id})">删除</button>
+                const kbGrid = document.getElementById('kbGrid');
+                kbGrid.innerHTML = kbs.map(kb => `
+                    <div class="kb-card card" onclick="enterKnowledgeBase(${kb.id})">
+                        <div class="kb-content">
+                            <div class="kb-icon-wrapper">📚</div>
+                            <h3 class="kb-title" title="${escapeHtml(kb.name)}">${escapeHtml(kb.name)}</h3>
+                            <p class="kb-description">${kb.description ? escapeHtml(kb.description) : '暂无描述'}</p>
+                            <div class="kb-meta">
+                                <span class="kb-meta-item">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                        <polyline points="14 2 14 8 20 8"></polyline>
+                                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                                        <polyline points="10 9 9 9 8 9"></polyline>
+                                    </svg>
+                                    ${kb.document_count} 个文档
+                                </span>
+                                <span class="kb-meta-item">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <polyline points="12 6 12 12 16 14"></polyline>
+                                    </svg>
+                                    ${kb.formatted_created_at || formatDate(kb.created_at)}
+                                </span>
+                            </div>
+                            <div class="kb-actions" onclick="event.stopPropagation()">
+                                <button class="kb-action-btn" onclick="editKnowledgeBase(${kb.id}, '${escapeHtml(kb.name).replace(/'/g, "\\'")}', '${escapeHtml(kb.description || '').replace(/'/g, "\\'")}')">编辑</button>
+                                <button class="kb-action-btn delete" onclick="deleteKnowledgeBase(${kb.id})">删除</button>
+                            </div>
                         </div>
                     </div>
                 `).join('');
 
-                if (documents.length === 0) {
-                    documentsGrid.innerHTML = `
-                        <div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: #999;">
-                            暂无文档，点击上方按钮上传文档
+                if (kbs.length === 0) {
+                    kbGrid.innerHTML = `
+                        <div class="empty-state" style="grid-column: 1 / -1;">
+                            <div class="empty-state-icon">📚</div>
+                            <div class="empty-state-text">暂无知识库</div>
+                            <div class="empty-state-sub">点击上方按钮创建您的第一个知识库</div>
                         </div>
                     `;
                 }
             } catch (error) {
-                showToast('加载文档列表失败', 'error');
+                showToast('加载知识库列表失败', 'error');
             }
         }
 
-        // 处理文件上传
-        async function handleFileUpload(e) {
-            const file = e.target.files[0];
-            if (!file) return;
+        // 进入知识库
+        function enterKnowledgeBase(kbId) {
+            window.location.href = `/static/kb_detail.html?kb_id=${kbId}`;
+        }
 
-            const formData = new FormData();
-            formData.append('file', file);
+        // 创建知识库
+        async function createKnowledgeBase() {
+            const name = document.getElementById('kbName').value.trim();
+            const description = document.getElementById('kbDesc').value.trim();
+
+            if (!name) {
+                showToast('请输入知识库名称', 'error');
+                return;
+            }
 
             try {
-                showToast('正在上传文档...', 'info');
-                const response = await fetch('/api/documents/upload', {
+                const response = await fetch('/api/knowledge-bases', {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${accessToken}`
+                        'Authorization': `Bearer ${getToken()}`,
+                        'Content-Type': 'application/json'
                     },
-                    body: formData
+                    body: JSON.stringify({ name, description })
                 });
 
                 if (response.ok) {
-                    showToast('文档上传成功，正在处理...', 'success');
-                    await loadDocuments();
+                    showToast('知识库创建成功', 'success');
+                    hideCreateKbModal();
+                    document.getElementById('kbName').value = '';
+                    document.getElementById('kbDesc').value = '';
+                    await loadKnowledgeBases();
                 } else {
                     const data = await response.json();
-                    showToast(data.detail || '上传失败', 'error');
+                    showToast(data.detail || '创建失败', 'error');
                 }
             } catch (error) {
                 showToast('网络错误', 'error');
             }
-
-            fileInput.value = '';
         }
 
-        // 下载文档
-        async function downloadDocument(docId) {
-            try {
-                const response = await fetch(`/api/documents/${docId}/download`, {
-                    headers: apiConfig.headers
-                });
-
-                if (response.ok) {
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'document';
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-                } else {
-                    showToast('下载失败', 'error');
-                }
-            } catch (error) {
-                showToast('下载失败', 'error');
-            }
-        }
-
-        // 删除文档
-        async function deleteDocument(docId) {
-            if (!confirm('确定要删除这个文档吗？')) return;
+        // 删除知识库
+        async function deleteKnowledgeBase(kbId) {
+            if (!confirm('确定要删除这个知识库吗？删除前请确保该知识库下没有文档。')) return;
 
             try {
-                const response = await fetch(`/api/documents/${docId}`, {
+                const response = await fetch(`/api/knowledge-bases/${kbId}`, {
                     method: 'DELETE',
-                    headers: apiConfig.headers
+                    headers: { 'Authorization': `Bearer ${getToken()}` }
                 });
 
                 if (response.ok) {
-                    showToast('文档删除成功', 'success');
-                    await loadDocuments();
+                    showToast('知识库删除成功', 'success');
+                    await loadKnowledgeBases();
                 } else {
-                    showToast('删除失败', 'error');
+                    const data = await response.json();
+                    showToast(data.detail || '删除失败', 'error');
                 }
             } catch (error) {
                 showToast('删除失败', 'error');
             }
         }
 
-        // 退出登录
-        function logout() {
-            localStorage.removeItem('access_token');
-            window.location.href = '/static/login.html';
+        // 编辑知识库
+        async function editKnowledgeBase(kbId, currentName, currentDesc) {
+            const newName = prompt('请输入新的知识库名称：', currentName);
+            if (!newName) return;
+
+            try {
+                const response = await fetch(`/api/knowledge-bases/${kbId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${getToken()}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name: newName })
+                });
+
+                if (response.ok) {
+                    showToast('知识库更新成功', 'success');
+                    await loadKnowledgeBases();
+                } else {
+                    const data = await response.json();
+                    showToast(data.detail || '更新失败', 'error');
+                }
+            } catch (error) {
+                showToast('更新失败', 'error');
+            }
         }
 
-        // 工具函数
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
+        // 显示/隐藏创建知识库弹窗
+        function showCreateKbModal() {
+            document.getElementById('createKbModal').classList.remove('hidden');
+            document.getElementById('kbName').focus();
         }
 
-        function formatDate(dateStr) {
-            const date = new Date(dateStr);
-            const now = new Date();
-            const diff = now - date;
-
-            if (diff < 60000) return '刚刚';
-            if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
-            if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
-            return date.toLocaleDateString();
+        function hideCreateKbModal() {
+            document.getElementById('createKbModal').classList.add('hidden');
         }
 
-        function formatFileSize(bytes) {
-            if (bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-        }
-
-        function getFileIcon(fileType) {
-            const icons = {
-                'pdf': '📕',
-                'docx': '📘',
-                'txt': '📄',
-                'md': '📝'
-            };
-            return icons[fileType] || '📄';
-        }
-
-        function getStatusText(status) {
-            const texts = {
-                'completed': '已完成',
-                'pending': '处理中',
-                'error': '失败'
-            };
-            return texts[status] || status;
-        }
-
-        function showToast(message, type = 'info') {
-            toast.textContent = message;
-            toast.className = `toast ${type}`;
-            toast.style.display = 'block';
-
-            setTimeout(() => {
-                toast.style.display = 'none';
-            }, 3000);
+        // 事件监听
+        function setupEventListeners() {
+            document.getElementById('logoutBtn').addEventListener('click', logout);
+            document.getElementById('createKbBtn').addEventListener('click', showCreateKbModal);
+            document.getElementById('cancelCreateKb').addEventListener('click', hideCreateKbModal);
+            document.getElementById('confirmCreateKb').addEventListener('click', createKnowledgeBase);
         }
     </script>
 </body>
