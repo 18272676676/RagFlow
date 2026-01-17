@@ -40,6 +40,7 @@ class QAResponse(BaseModel):
     completion_tokens: Optional[int] = None
     total_tokens: Optional[int] = None
     created_at: datetime
+    answer_source: Optional[str] = Field(default="knowledge_base", description="答案来源: knowledge_base(知识库) / llm(大模型)")
 
 
 class QAErrorResponse(BaseModel):

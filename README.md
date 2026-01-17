@@ -107,8 +107,10 @@ pip install -r requirements.txt
 ### 4. 初始化数据库
 
 ```bash
-python init_db.py --create
+python init_db.py
 ```
+
+> 这会自动创建所有数据表并初始化 admin 用户（用户名: `admin`，密码: `admin123`）
 
 ### 5. 启动服务
 
@@ -319,9 +321,6 @@ GET /api/qa/health
 
 ## 扩展建议
 
-- 添加用户认证
-- 支持多轮对话
-- 添加对话历史
 - 支持 Rerank
 - 添加文档版本管理
 - 支持批量上传

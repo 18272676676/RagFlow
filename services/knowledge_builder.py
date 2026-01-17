@@ -71,8 +71,203 @@ class KnowledgeBuilder:
         document_id: int,
         file_path: str,
         file_name: str,
+        db: Session,
+        cleanup_temp_file: bool = False
+    ) -> bool:
+        """
+        构建知识库
+
+        Args:
+            document_id: 文档 ID
+            file_path: 文件路径
+            file_name: 文件名
+            db: 数据库会话
+            cleanup_temp_file: 是否清理临时文件
+
+        Returns:
+            是否构建成功
+        """
+        try:
+            # 更新状态为处理中
+            self._update_document_status(db, document_id, "processing")
+
+            # 1. 解析文档
+            text = await self._parse_document(file_path, file_name)
+            if not text:
+                raise ValueError("文档解析失败或内容为空")
+
+            # 2. 分块
+            chunks = self.chunker.chunk(text)
+            logger.info(f"文档 {file_name} 分块完成，共 {len(chunks)} 个块")
+
+            # 3. 保存切片到数据库
+            chunk_embeddings = []
+            chunk_documents = []
+
+            for chunk in chunks:
+                # 保存到数据库
+                db_chunk = Chunk(
+                    document_id=document_id,
+                    chunk_index=chunk.index,
+                    chunk_text=chunk.text
+                )
+                db.add(db_chunk)
+                db.flush()  # 获取 ID
+
+                # 准备向量数据
+                chunk_embeddings.append(chunk.text)
+                chunk_documents.append({
+                    "document_id": document_id,
+                    "chunk_index": chunk.index,
+                    "chunk_text": chunk.text
+                })
+
+            # 4. 计算 Embedding
+            embeddings = self.embedding_service.embed_batch(chunk_embeddings)
+            logger.info(f"计算 Embedding 完成，向量维度: {len(embeddings[0])}")
+
+            # 5. 存储到向量库
+            self.vector_store.add_documents(chunk_documents, embeddings)
+
+            # 6. 更新状态为完成
+            self._update_document_status(
+                db,
+                document_id,
+                "completed",
+                chunk_count=len(chunks)
+            )
+
+            db.commit()
+            logger.info(f"文档 {file_name} 知识构建完成")
+
+            # 如果是临时文件，删除它
+            if cleanup_temp_file and file_path:
+                try:
+                    import os
+                    if os.path.exists(file_path):
+                        os.unlink(file_path)
+                        logger.info(f"已删除临时文件: {file_path}")
+                except Exception as e:
+                    logger.warning(f"删除临时文件失败: {e}")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"知识构建失败: {e}", exc_info=True)
+            self._update_document_status(
+                db,
+                document_id,
+                "failed",
+                error_message=str(e)
+            )
+            db.commit()
+
+            # 如果是临时文件且构建失败，也要删除
+            if cleanup_temp_file and file_path:
+                try:
+                    import os
+                    if os.path.exists(file_path):
+                        os.unlink(file_path)
+                        logger.info(f"已删除临时文件: {file_path}")
+                except Exception as e:
+                    logger.warning(f"删除临时文件失败: {e}")
+
+            return False
+
+    async def build_knowledge_from_content(
+        self,
+        document_id: int,
+        file_content: bytes,
+        file_name: str,
+        file_ext: str,
+        storage_path: str,
         db: Session
     ) -> bool:
+        """
+        直接从内存中的文件内容构建知识库（无需读取文件）
+
+        Args:
+            document_id: 文档 ID
+            file_content: 文件内容（bytes）
+            file_name: 文件名
+            file_ext: 文件扩展名（带点，如 .docx）
+            storage_path: 存储路径（用于元数据）
+            db: 数据库会话
+
+        Returns:
+            是否构建成功
+        """
+        try:
+            # 更新状态为处理中
+            self._update_document_status(db, document_id, "processing")
+
+            # 1. 解析文档（从内存中的bytes直接解析）
+            if not DocumentParserFactory.is_supported(file_name):
+                raise ValueError(f"不支持的文件类型: {file_name}")
+
+            parser = DocumentParserFactory.get_parser(file_name)
+            text = parser.parse(file_content)
+
+            if not text:
+                raise ValueError("文档解析失败或内容为空")
+
+            logger.info(f"文档 {file_name} 解析成功，内容长度: {len(text)}")
+
+            # 2. 分块
+            chunks = self.chunker.chunk(text)
+            logger.info(f"文档 {file_name} 分块完成，共 {len(chunks)} 个块")
+
+            # 3. 保存切片到数据库
+            chunk_embeddings = []
+            chunk_documents = []
+
+            for chunk in chunks:
+                # 保存到数据库
+                db_chunk = Chunk(
+                    document_id=document_id,
+                    chunk_index=chunk.index,
+                    chunk_text=chunk.text
+                )
+                db.add(db_chunk)
+                db.flush()  # 获取 ID
+
+                # 准备向量数据
+                chunk_embeddings.append(chunk.text)
+                chunk_documents.append({
+                    "document_id": document_id,
+                    "chunk_index": chunk.index,
+                    "chunk_text": chunk.text
+                })
+
+            # 4. 计算 Embedding
+            embeddings = self.embedding_service.embed_batch(chunk_embeddings)
+            logger.info(f"计算 Embedding 完成，向量维度: {len(embeddings[0])}")
+
+            # 5. 存储到向量库
+            self.vector_store.add_documents(chunk_documents, embeddings)
+
+            # 6. 更新状态为完成
+            self._update_document_status(
+                db,
+                document_id,
+                "completed",
+                chunk_count=len(chunks)
+            )
+
+            db.commit()
+            logger.info(f"文档 {file_name} 知识构建完成")
+            return True
+
+        except Exception as e:
+            logger.error(f"知识构建失败: {e}", exc_info=True)
+            self._update_document_status(
+                db,
+                document_id,
+                "failed",
+                error_message=str(e)
+            )
+            db.commit()
+            return False
         """
         构建知识库
 
@@ -137,6 +332,17 @@ class KnowledgeBuilder:
 
             db.commit()
             logger.info(f"文档 {file_name} 知识构建完成")
+
+            # 如果是临时文件，删除它
+            if cleanup_temp_file and file_path:
+                try:
+                    import os
+                    if os.path.exists(file_path):
+                        os.unlink(file_path)
+                        logger.info(f"已删除临时文件: {file_path}")
+                except Exception as e:
+                    logger.warning(f"删除临时文件失败: {e}")
+
             return True
 
         except Exception as e:
@@ -148,6 +354,17 @@ class KnowledgeBuilder:
                 error_message=str(e)
             )
             db.commit()
+
+            # 如果是临时文件且构建失败，也要删除
+            if cleanup_temp_file and file_path:
+                try:
+                    import os
+                    if os.path.exists(file_path):
+                        os.unlink(file_path)
+                        logger.info(f"已删除临时文件: {file_path}")
+                except Exception as e:
+                    logger.warning(f"删除临时文件失败: {e}")
+
             return False
 
     async def _parse_document(self, file_path: str, file_name: str) -> str:

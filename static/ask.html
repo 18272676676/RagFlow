@@ -280,6 +280,25 @@
         const sourcesContainer = document.getElementById('sourcesContainer');
         const sourcesList = document.getElementById('sourcesList');
 
+        // 获取 token
+        function getToken() {
+            return localStorage.getItem('access_token');
+        }
+
+        // 检查是否登录
+        function checkAuth() {
+            const token = getToken();
+            if (!token) {
+                alert('请先登录');
+                window.location.href = 'login.html';
+                return false;
+            }
+            return true;
+        }
+
+        // 页面加载时检查认证
+        checkAuth();
+
         // 提问
         askBtn.addEventListener('click', async () => {
             const question = questionInput.value.trim();
@@ -296,10 +315,12 @@
             sourcesContainer.classList.remove('active');
 
             try {
+                const token = getToken();
                 const response = await fetch('/api/qa/ask', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
                     },
                     body: JSON.stringify({
                         question: question,
@@ -327,10 +348,18 @@
                         sourcesContainer.classList.add('active');
                     }
                 } else {
-                    alert(data.detail || '问答失败，请重试');
+                    // 处理认证错误
+                    if (response.status === 401 || response.status === 403) {
+                        alert('登录已过期，请重新登录');
+                        localStorage.removeItem('access_token');
+                        window.location.href = 'login.html';
+                    } else {
+                        alert(data.detail || '问答失败，请重试');
+                    }
                 }
             } catch (error) {
-                alert('网络错误，请检查网络连接');
+                console.error('问答错误:', error);
+                alert('网络错误，请检查网络连接或稍后重试');
             } finally {
                 loading.classList.remove('active');
                 askBtn.disabled = false;

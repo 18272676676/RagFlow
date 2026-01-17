@@ -32,7 +32,7 @@ except ImportError as e:
     print(f"Available paths: {sys.path}")
     sys.exit(1)
 
-from RagFlow.models.db_models import Document, Chunk, QALog
+from RagFlow.models.db_models import User, Conversation, Message, Document, Chunk, QALog
 from RagFlow.config.settings import settings
 from RagFlow.core.logger import setup_logger, get_logger
 

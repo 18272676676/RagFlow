@@ -31,6 +31,8 @@ from RagFlow.core.database import init_db
 from RagFlow.core.logger import setup_logger, get_logger
 from RagFlow.api.routes.document import router as document_router
 from RagFlow.api.routes.qa import router as qa_router
+from RagFlow.api.routes.auth import router as auth_router, create_admin_user
+from RagFlow.api.routes.conversation import router as conversation_router
 
 # 设置日志
 setup_logger(log_dir=settings.LOG_DIR, log_level=settings.LOG_LEVEL)
@@ -49,6 +51,17 @@ async def lifespan(app: FastAPI):
         logger.info("数据库初始化成功")
     except Exception as e:
         logger.error(f"数据库初始化失败: {e}")
+
+    # 创建默认admin用户
+    try:
+        from RagFlow.core.database import SessionLocal
+        db = SessionLocal()
+        try:
+            create_admin_user(db)
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"创建admin用户失败: {e}")
 
     logger.info("应用启动完成")
 
@@ -78,6 +91,8 @@ app.add_middleware(
 
 
 # 注册路由
+app.include_router(auth_router)
+app.include_router(conversation_router)
 app.include_router(document_router)
 app.include_router(qa_router)
 
@@ -115,7 +130,11 @@ async def health():
 @app.exception_handler(Exception)
 async def global_exception_handler(_request, exc):
     """全局异常处理器"""
-    logger.error(f"未处理的异常: {exc}", exc_info=True)
+    logger.error(f"========== 未处理的异常 ==========")
+    logger.error(f"异常类型: {type(exc).__name__}")
+    logger.error(f"异常消息: {exc}")
+    logger.error(f"异常详情:", exc_info=True)
+    logger.error(f"====================================")
     return JSONResponse(
         status_code=500,
         content={

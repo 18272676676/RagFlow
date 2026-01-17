@@ -25,7 +25,11 @@ engine: Engine = create_engine(
     pool_size=10,  # 连接池大小
     max_overflow=20,  # 最大溢出连接数
     pool_recycle=3600,  # 连接回收时间（秒）
-    echo=True  # 是否输出 SQL 日志（调试时启用）
+    echo=False,  # 是否输出 SQL 日志（调试时启用）
+    connect_args={
+        "charset": "utf8mb4",
+        "init_command": "SET time_zone = '+08:00'"  # 设置时区为北京时间（UTC+8）
+    }
 )
 
 # 创建 Session 工厂
@@ -85,7 +89,7 @@ def init_db():
 
     创建所有定义的表结构
     """
-    from RagFlow.models.db_models import Document, Chunk, QALog
+    from RagFlow.models.db_models import User, Conversation, Message, Document, Chunk, QALog
 
     # 创建所有表
     Base.metadata.create_all(bind=engine)

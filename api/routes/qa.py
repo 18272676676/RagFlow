@@ -5,6 +5,7 @@
 1. 提供问答的 HTTP 接口
 2. 处理用户问题并返回答案
 3. 返回答案来源信息
+4. 支持会话历史
 
 为什么现在需要:
 - 需要通过 HTTP 接口与前端交互
@@ -19,6 +20,8 @@ import uuid
 
 from RagFlow.core.database import get_db
 from RagFlow.core.logger import get_logger, set_request_id
+from RagFlow.core.auth import get_current_active_user
+from RagFlow.models.db_models import User, Conversation, Message
 from RagFlow.models.qa import QARequest, QAResponse
 from RagFlow.services.qa_service import QAService
 from RagFlow.services.retriever import Retriever
@@ -26,6 +29,7 @@ from RagFlow.services.prompt_builder import PromptBuilderFactory
 from RagFlow.services.llm import LLMService, DeepSeekLLM
 from RagFlow.services.embedding import EmbeddingService, SentenceTransformerEmbedding
 from RagFlow.services.vector_store import VectorStoreFactory
+from RagFlow.api.routes.conversation import create_message as add_message_to_conversation
 from RagFlow.config.settings import settings
 
 logger = get_logger(__name__)
@@ -65,13 +69,16 @@ _qa_service = QAService(
     llm_service=_llm_service,
     top_k=settings.TOP_K,
     temperature=settings.TEMPERATURE,
-    max_tokens=settings.MAX_TOKENS
+    max_tokens=settings.MAX_TOKENS,
+    similarity_threshold=getattr(settings, 'SIMILARITY_THRESHOLD', 0.3)
 )
 
 
 @router.post("/ask", response_model=QAResponse)
 async def ask_question(
     request: QARequest,
+    conversation_id: int = None,
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -82,12 +89,23 @@ async def ask_question(
     2. 构建 Prompt（包含上下文）
     3. 调用 LLM 生成答案
     4. 返回答案和来源信息
+    5. 记录到会话历史
     """
     # 设置请求 ID
     request_id = uuid.uuid4().hex
     set_request_id(request_id)
 
     logger.info(f"收到问答请求: {request.question}")
+
+    # 如果提供了会话ID，验证会话是否存在
+    conversation = None
+    if conversation_id:
+        conversation = db.query(Conversation).filter(
+            Conversation.id == conversation_id,
+            Conversation.user_id == current_user.id
+        ).first()
+        if not conversation:
+            raise HTTPException(status_code=404, detail="会话不存在")
 
     try:
         # 调用问答服务
@@ -96,6 +114,27 @@ async def ask_question(
             request_id=request_id,
             db=db
         )
+
+        # 保存消息到会话
+        if conversation:
+            conv_id = conversation.id  # 使用 conversation 对象的 id
+            user_message = Message(
+                conversation_id=conv_id,
+                role="user",
+                content=request.question
+            )
+            db.add(user_message)
+
+            # 保存助手回复到会话
+            assistant_message = Message(
+                conversation_id=conv_id,
+                role="assistant",
+                content=response.answer
+            )
+            db.add(assistant_message)
+            db.commit()
+        else:
+            logger.info(f"没有提供 conversation_id，消息未保存到会话")
 
         logger.info(f"问答成功，request_id: {request_id}")
         return response

@@ -247,6 +247,28 @@
 
         let selectedFile = null;
 
+        // 获取 token
+        function getToken() {
+            return localStorage.getItem('access_token');
+        }
+
+        // 检查是否登录
+        function checkAuth() {
+            const token = getToken();
+            if (!token) {
+                showMessage('请先登录', 'error');
+                // 延迟跳转到登录页
+                setTimeout(() => {
+                    window.location.href = 'login.html';
+                }, 1500);
+                return false;
+            }
+            return true;
+        }
+
+        // 页面加载时检查认证
+        checkAuth();
+
         // 点击上传区域
         uploadArea.addEventListener('click', () => {
             fileInput.click();
@@ -310,34 +332,115 @@
         uploadBtn.addEventListener('click', async () => {
             if (!selectedFile) return;
 
+            // 检查认证
+            const token = getToken();
+            if (!token) {
+                console.error('Token 不存在');
+                showMessage('请先登录', 'error');
+                setTimeout(() => {
+                    window.location.href = 'login.html';
+                }, 1500);
+                return;
+            }
+
+            console.log('========== 开始上传 ==========');
+            console.log('文件名:', selectedFile.name);
+            console.log('文件大小:', selectedFile.size);
+            console.log('文件类型:', selectedFile.type);
+            console.log('Token:', token ? token.substring(0, 20) + '...' : '无');
+            console.log('Token长度:', token ? token.length : 0);
+
             const formData = new FormData();
             formData.append('file', selectedFile);
+
+            console.log('FormData准备完成');
+            console.log('FormData entries:', Array.from(formData.entries()));
 
             loading.classList.add('active');
             uploadBtn.disabled = true;
             hideMessage();
 
             try {
+                console.log('========== 发送请求 ==========');
+                console.log('发送请求到: /api/documents/upload');
+                console.log('请求方法: POST');
+                console.log('请求头:', {
+                    'Authorization': `Bearer ${token.substring(0, 20)}...`
+                });
+                console.log('请求体类型:', 'FormData');
+
                 const response = await fetch('/api/documents/upload', {
                     method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
                     body: formData
                 });
 
-                const data = await response.json();
+                console.log('========== 接收响应 ==========');
+                console.log('响应状态码:', response.status);
+                console.log('响应状态文本:', response.statusText);
+                console.log('响应类型:', response.type);
+                console.log('响应头:', Object.fromEntries(response.headers.entries()));
+
+                // 读取响应文本
+                const responseText = await response.text();
+                console.log('响应原始文本:', responseText);
+
+                // 尝试解析JSON
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                    console.log('响应数据:', data);
+                } catch (parseError) {
+                    console.error('JSON解析失败:', parseError);
+                    console.log('原始响应文本:', responseText);
+                    data = { detail: responseText || '服务器返回了非JSON格式的数据' };
+                }
 
                 if (response.ok) {
+                    console.log('上传成功!');
+                    console.log('文档ID:', data.id);
+                    console.log('文件路径:', data.file_path);
                     showMessage('文档上传成功！系统正在处理，请稍候...', 'success');
                     selectedFile = null;
                     fileInfo.classList.remove('active');
                     fileInput.value = '';
                 } else {
-                    showMessage(data.detail || '上传失败，请重试', 'error');
+                    // 处理认证错误
+                    if (response.status === 401 || response.status === 403) {
+                        console.error('认证失败，状态码:', response.status);
+                        showMessage('登录已过期，请重新登录', 'error');
+                        localStorage.removeItem('access_token');
+                        setTimeout(() => {
+                            window.location.href = 'login.html';
+                        }, 1500);
+                    } else {
+                        console.error('上传失败，状态码:', response.status);
+                        console.error('错误详情:', data);
+                        const errorMsg = data.detail || data.message || '上传失败，请重试';
+                        showMessage(errorMsg, 'error');
+                    }
                 }
             } catch (error) {
-                showMessage('网络错误，请检查网络连接', 'error');
+                console.error('========== 上传异常 ==========');
+                console.error('错误名称:', error.name);
+                console.error('错误消息:', error.message);
+                console.error('错误堆栈:', error.stack);
+                console.error('=============================');
+
+                // 更详细的错误信息
+                let errorMsg = '网络错误，请检查网络连接或稍后重试';
+                if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                    errorMsg = '无法连接到服务器，请检查服务是否启动';
+                } else if (error.name === 'SyntaxError' && error.message.includes('JSON')) {
+                    errorMsg = '服务器返回数据格式错误';
+                }
+                showMessage(errorMsg, 'error');
             } finally {
                 loading.classList.remove('active');
                 uploadBtn.disabled = false;
+                console.log('========== 上传结束 ==========');
             }
         });
 

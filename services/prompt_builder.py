@@ -63,7 +63,7 @@ class PromptBuilder:
         max_context_length: int = 8000
     ) -> List[Dict]:
         """
-        构建对话消息列表
+        构建对话消息列表（带知识库上下文）
 
         Args:
             context_chunks: 上下文切片列表
@@ -89,6 +89,43 @@ class PromptBuilder:
         ]
 
         logger.info(f"构建 Prompt 成功，上下文长度: {len(context_text)}")
+        return messages
+
+    def build_without_context(
+        self,
+        question: str
+    ) -> List[Dict]:
+        """
+        构建对话消息列表（无知识库上下文，直接使用大模型回答）
+
+        Args:
+            question: 用户问题
+
+        Returns:
+            消息列表，包含 system、user 消息
+        """
+        # 无上下文时的 system prompt
+        system_prompt = """你是一个智能助手，能够回答各种问题。
+
+【回答要求】
+1. 回答要准确、清晰、有条理
+2. 保持专业和友好的语气
+3. 可以根据你的知识库回答任何问题
+4. 对于日期时间类问题，请给出准确的答案"""
+
+        # 构建消息列表
+        messages = [
+            {
+                "role": "system",
+                "content": system_prompt
+            },
+            {
+                "role": "user",
+                "content": f"【用户问题】\n{question}\n\n请回答用户的问题："
+            }
+        ]
+
+        logger.info(f"构建无上下文 Prompt 成功")
         return messages
 
     def _build_context(

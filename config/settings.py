@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     TOP_K: int = 5
     TEMPERATURE: float = 0.7
     MAX_TOKENS: int = 2000
+    SIMILARITY_THRESHOLD: float = 0.3  # 相似度阈值，低于此值认为知识库中没有相关内容
 
     # ==================== 日志配置 ====================
     LOG_LEVEL: str = "INFO"
@@ -55,6 +56,19 @@ class Settings(BaseSettings):
     # ==================== 服务配置 ====================
     SERVER_HOST: str = "0.0.0.0"
     SERVER_PORT: int = 8000
+
+    # ==================== MinIO 配置 ====================
+    MINIO_ENDPOINT: str = "http://117.72.188.95:9000"
+    MINIO_ACCESS_KEY: str = "minioadmin"
+    MINIO_SECRET_KEY: str = "minioadmin123"
+    MINIO_BUCKET_NAME: str = "rag-documents"
+    MINIO_SECURE: bool = False
+    USE_MINIO: bool = False  # 是否使用MinIO存储 (本地和MinIO服务器网络不通，使用本地存储)
+
+    # ==================== 认证配置 ====================
+    SECRET_KEY: str = "your-secret-key-change-in-production-2024"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7天
 
     class Config:
         env_file = ".env"

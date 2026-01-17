@@ -111,6 +111,12 @@ class FAISSVectorStore(VectorStore):
         docs_file = self.index_path / "documents.pkl"
 
         if index_file.exists() and docs_file.exists():
+            # 检查文件大小，避免加载损坏的空文件
+            if index_file.stat().st_size == 0 or docs_file.stat().st_size == 0:
+                logger.warning(f"索引文件损坏或为空，将重新初始化: index={index_file.stat().st_size}B, docs={docs_file.stat().st_size}B")
+                self._init_index()
+                return
+
             try:
                 import faiss
 
@@ -119,7 +125,7 @@ class FAISSVectorStore(VectorStore):
                     self.documents = pickle.load(f)
                 logger.info(f"加载 FAISS 索引成功，包含 {self.index.ntotal} 个向量")
             except Exception as e:
-                logger.error(f"加载 FAISS 索引失败: {e}")
+                logger.error(f"加载 FAISS 索引失败: {e}，将重新初始化索引")
                 self._init_index()
         else:
             self._init_index()
@@ -164,8 +170,12 @@ class FAISSVectorStore(VectorStore):
         dimension = embeddings_array.shape[1]
 
         if self.index is None:
+            # 使用余弦相似度：先归一化向量，再使用内积
+            # IndexFlatIP 使用归一化向量时等于余弦相似度
             self.index = faiss.IndexFlatIP(dimension)
 
+        # 归一化向量以获得余弦相似度（范围 -1 到 1）
+        faiss.normalize_L2(embeddings_array)
         self.index.add(embeddings_array)
 
         start_id = len(self.documents)
@@ -193,22 +203,36 @@ class FAISSVectorStore(VectorStore):
         import faiss
 
         query_array = np.array([query_embedding], dtype=np.float32)
+        # 归一化查询向量以获得余弦相似度
+        faiss.normalize_L2(query_array)
         similarities, indices = self.index.search(query_array, top_k)
 
         results = []
         for similarity, idx in zip(similarities[0], indices[0]):
-            if idx == -1:
+            if idx == -1 or idx >= len(self.documents):
                 continue
 
             doc = self.documents[idx]
+
+            # 确保document_id是整数
+            doc_id = doc.get("document_id")
+            if doc_id is not None:
+                try:
+                    doc_id = int(doc_id)
+                except (ValueError, TypeError):
+                    logger.error(f"无法将document_id转换为整数: {doc_id} (type: {type(doc_id).__name__})")
+                    logger.error(f"原始文档数据: {doc}")
+                    continue
+
             results.append(SearchResult(
-                chunk_id=doc["id"],
-                document_id=doc["document_id"],
-                chunk_index=doc["chunk_index"],
-                chunk_text=doc["chunk_text"],
+                chunk_id=int(doc.get("id", idx)),
+                document_id=doc_id,
+                chunk_index=int(doc.get("chunk_index", 0)),
+                chunk_text=doc.get("chunk_text", ""),
                 similarity=float(similarity)
             ))
 
+        logger.info(f"向量搜索完成，返回 {len(results)} 个结果")
         return results
 
     def delete_by_document_id(self, document_id: int) -> None:

@@ -13,18 +13,20 @@
 """
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List
 from pathlib import Path
 import uuid
-import aiofiles
+import io
 
 from RagFlow.core.database import get_db
 from RagFlow.core.logger import get_logger, set_request_id
-from RagFlow.models.db_models import Document
+from RagFlow.core.auth import get_current_active_user
+from RagFlow.models.db_models import Document, User
 from RagFlow.models.document import DocumentResponse
 from RagFlow.services.knowledge_builder import KnowledgeBuilder
+from RagFlow.services.storage_service import get_storage_service
 from RagFlow.config.settings import settings
 
 logger = get_logger(__name__)
@@ -32,13 +34,23 @@ logger = get_logger(__name__)
 # 创建路由器
 router = APIRouter(prefix="/api/documents", tags=["文档管理"])
 
-# 初始化知识构建器
-knowledge_builder = KnowledgeBuilder()
+# 延迟初始化知识构建器
+knowledge_builder = None
+
+def get_knowledge_builder():
+    """获取知识构建器实例（延迟加载）"""
+    global knowledge_builder
+    if knowledge_builder is None:
+        logger.info("初始化知识构建器...")
+        knowledge_builder = KnowledgeBuilder()
+        logger.info("知识构建器初始化成功")
+    return knowledge_builder
 
 
 @router.post("/upload", response_model=DocumentResponse)
 async def upload_document(
     file: UploadFile = File(...),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -53,61 +65,109 @@ async def upload_document(
     支持的文件格式: .txt, .md, .pdf, .docx
     """
     set_request_id()
-    logger.info(f"开始上传文档: {file.filename}")
+    logger.info(f"========== 开始上传文档 ==========")
+    logger.info(f"文件名: {file.filename}")
+    logger.info(f"文件大小: {file.size if hasattr(file, 'size') else '未知'}")
+    logger.info(f"用户ID: {current_user.id}")
+    logger.info(f"用户名: {current_user.username}")
+    logger.info(f"Content-Type: {file.content_type if hasattr(file, 'content_type') else '未知'}")
 
     # 1. 验证文件类型
     if not file.filename:
+        logger.error("文件名不能为空")
         raise HTTPException(status_code=400, detail="文件名不能为空")
+
+    logger.info(f"验证文件名成功")
 
     # 获取文件扩展名
     file_ext = Path(file.filename).suffix.lower()
+    logger.info(f"文件扩展名: {file_ext}")
 
     # 检查文档解析器是否支持该文件类型
     from RagFlow.services.document_parser import DocumentParserFactory
     if not DocumentParserFactory.is_supported(file.filename):
+        logger.error(f"不支持的文件类型: {file.filename}")
         raise HTTPException(
             status_code=400,
             detail=f"不支持的文件类型: {file.filename}，仅支持 {', '.join(DocumentParserFactory.get_supported_extensions())}"
         )
 
-    # 2. 检查文件大小
-    content = await file.read()
+    logger.info(f"文件类型验证通过")
+
+    # 2. 读取文件内容
+    try:
+        content = await file.read()
+        logger.info(f"读取文件内容成功，大小: {len(content)} bytes")
+    except Exception as e:
+        logger.error(f"读取文件内容失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"读取文件失败: {str(e)}")
+
     if len(content) > settings.MAX_FILE_SIZE:
+        logger.error(f"文件过大: {len(content)} bytes")
         raise HTTPException(
             status_code=400,
             detail=f"文件过大，最大支持 {settings.MAX_FILE_SIZE // 1024 // 1024}MB"
         )
 
-    # 3. 保存文件
+    logger.info(f"文件大小验证通过")
+
+    # 3. 创建文档记录
     file_id = uuid.uuid4().hex
-    file_path = Path(knowledge_builder.upload_dir) / f"{file_id}{file_ext}"
+    storage_path = f"{current_user.id}/{file_id}{file_ext}"
 
-    async with aiofiles.open(file_path, "wb") as f:
-        await f.write(content)
+    logger.info(f"生成文档记录: file_id={file_id}, storage_path={storage_path}")
 
-    # 4. 创建文档记录
     document = Document(
+        user_id=current_user.id,
         file_name=file.filename,
-        file_path=str(file_path),
+        file_path=storage_path,
         file_size=len(content),
         file_type=file_ext[1:],
         status="pending"
     )
 
     db.add(document)
-    db.commit()
-    db.refresh(document)
+    try:
+        db.commit()
+        db.refresh(document)
+        logger.info(f"数据库记录创建成功，document_id={document.id}")
+    except Exception as e:
+        logger.error(f"数据库提交失败: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"数据库操作失败: {str(e)}")
 
-    # 5. 异步触发知识构建
+    # 4. 异步触发知识构建 - 直接使用内存中的content，无需从存储下载
     import asyncio
-    asyncio.create_task(knowledge_builder.build_knowledge(
+
+    logger.info(f"准备触发知识构建任务")
+    kb = get_knowledge_builder()
+    asyncio.create_task(kb.build_knowledge_from_content(
         document_id=document.id,
-        file_path=str(file_path),
+        file_content=content,
         file_name=file.filename,
+        file_ext=file_ext,
+        storage_path=storage_path,
         db=db
     ))
+    logger.info(f"知识构建任务已异步触发")
 
-    logger.info(f"文档上传成功，document_id: {document.id}")
+    # 5. 异步上传文件到存储（不阻塞响应）
+    async def upload_to_storage():
+        storage_service = get_storage_service()
+        try:
+            logger.info(f"[存储任务] 准备上传文件到存储")
+            logger.info(f"[存储任务] storage_path={storage_path}, file_name={file.filename}, size={len(content)}")
+            result = await storage_service.upload_file(storage_path, file.filename, content)
+            logger.info(f"[存储任务] 文件上传到存储成功: {storage_path}, 结果: {result}")
+        except Exception as e:
+            logger.error(f"[存储任务] 文件上传到存储失败: {e}", exc_info=True)
+
+    asyncio.create_task(upload_to_storage())
+    logger.info(f"存储上传任务已异步触发")
+
+    logger.info(f"========== 文档上传接口返回成功 ==========")
+    logger.info(f"document_id={document.id}")
+    logger.info(f"===========================================")
     return document
 
 
@@ -116,6 +176,7 @@ async def list_documents(
     status: str = None,
     skip: int = 0,
     limit: int = 10,
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -128,7 +189,7 @@ async def list_documents(
     """
     set_request_id()
 
-    query = db.query(Document)
+    query = db.query(Document).filter(Document.user_id == current_user.id)
 
     if status:
         query = query.filter(Document.status == status)
@@ -142,12 +203,16 @@ async def list_documents(
 @router.get("/{document_id}", response_model=DocumentResponse)
 async def get_document(
     document_id: int,
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """查询单个文档详情"""
     set_request_id()
 
-    document = db.query(Document).filter(Document.id == document_id).first()
+    document = db.query(Document).filter(
+        Document.id == document_id,
+        Document.user_id == current_user.id
+    ).first()
 
     if not document:
         raise HTTPException(status_code=404, detail="文档不存在")
@@ -155,9 +220,43 @@ async def get_document(
     return document
 
 
+@router.get("/{document_id}/download")
+async def download_document(
+    document_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """下载文档文件"""
+    set_request_id()
+
+    document = db.query(Document).filter(
+        Document.id == document_id,
+        Document.user_id == current_user.id
+    ).first()
+
+    if not document:
+        raise HTTPException(status_code=404, detail="文档不存在")
+
+    storage_service = get_storage_service()
+    try:
+        content = await storage_service.download_file(document.file_path)
+        file_stream = io.BytesIO(content)
+
+        return StreamingResponse(
+            io.BytesIO(content),
+            media_type="application/octet-stream",
+            headers={
+                "Content-Disposition": f"attachment; filename={document.file_name}"
+            }
+        )
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+
 @router.delete("/{document_id}")
 async def delete_document(
     document_id: int,
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -169,12 +268,21 @@ async def delete_document(
     logger.info(f"开始删除文档: {document_id}")
 
     # 检查文档是否存在
-    document = db.query(Document).filter(Document.id == document_id).first()
+    document = db.query(Document).filter(
+        Document.id == document_id,
+        Document.user_id == current_user.id
+    ).first()
+
     if not document:
         raise HTTPException(status_code=404, detail="文档不存在")
 
+    # 删除存储文件
+    storage_service = get_storage_service()
+    await storage_service.delete_file(document.file_path)
+
     # 删除文档及相关知识
-    success = knowledge_builder.delete_document(document_id, db)
+    kb = get_knowledge_builder()
+    success = kb.delete_document(document_id, db)
 
     if success:
         return JSONResponse(
@@ -188,6 +296,7 @@ async def delete_document(
 @router.get("/{document_id}/chunks")
 async def get_document_chunks(
     document_id: int,
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -198,7 +307,11 @@ async def get_document_chunks(
     set_request_id()
 
     # 检查文档是否存在
-    document = db.query(Document).filter(Document.id == document_id).first()
+    document = db.query(Document).filter(
+        Document.id == document_id,
+        Document.user_id == current_user.id
+    ).first()
+
     if not document:
         raise HTTPException(status_code=404, detail="文档不存在")
 
