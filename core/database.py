@@ -28,9 +28,21 @@ engine: Engine = create_engine(
     echo=False,  # 是否输出 SQL 日志（调试时启用）
     connect_args={
         "charset": "utf8mb4",
-        "init_command": f"SET time_zone = '{settings.DB_TIMEZONE}'"  # 设置时区为北京时间（UTC+8）
     }
 )
+
+# 在引擎启动时设置全局时区
+from sqlalchemy import event
+
+@event.listens_for(engine, "connect")
+def set_time_zone_on_connect(dbapi_conn, connection_record):
+    """每次建立数据库连接时设置时区"""
+    cursor = dbapi_conn.cursor()
+    try:
+        cursor.execute(f"SET time_zone = '{settings.DB_TIMEZONE}'")
+        cursor.execute("SET NAMES utf8mb4")
+    finally:
+        cursor.close()
 
 # 创建 Session 工厂
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

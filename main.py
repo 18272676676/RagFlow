@@ -100,15 +100,36 @@ app.include_router(qa_router)
 app.mount("/static", StaticFiles(directory="./static"), name="static")
 
 
-# 根路径
+# 根路径 - 重定向到登录页
 @app.get("/")
 async def root():
-    """根路径"""
-    return {
-        "name": "RAG 知识库系统",
-        "version": "1.0.0",
-        "status": "running"
-    }
+    """根路径 - 重定向到登录页"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/static/login.html", status_code=307)
+
+
+# 登录页路由
+@app.get("/login")
+async def login_page():
+    """登录页路由"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/static/login.html", status_code=307)
+
+
+# 聊天页路由
+@app.get("/chat")
+async def chat_page():
+    """聊天页路由"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/static/index.html", status_code=307)
+
+
+# 文件管理页路由
+@app.get("/files")
+async def files_page():
+    """文件管理页路由"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/static/upload.html", status_code=307)
 
 
 # 健康检查

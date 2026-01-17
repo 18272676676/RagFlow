@@ -202,9 +202,12 @@ async def list_documents(
     documents = query.order_by(Document.created_at.desc()).offset(skip).limit(limit).all()
     logger.info(f"查询文档列表，数量: {len(documents)}")
 
-    # 转换为响应格式并添加格式化字段
+    # 转换为响应格式并添加格式化字段，动态计算每个文档的实际切片数量
     from RagFlow.models.document import format_document_response
-    result = [format_document_response(doc) for doc in documents]
+    result = []
+    for doc in documents:
+        actual_chunk_count = db.query(Chunk).filter(Chunk.document_id == doc.id).count()
+        result.append(format_document_response(doc, actual_chunk_count=actual_chunk_count))
 
     return result
 
@@ -226,9 +229,12 @@ async def get_document(
     if not document:
         raise HTTPException(status_code=404, detail="文档不存在")
 
+    # 动态计算实际切片数量，确保数据一致性
+    actual_chunk_count = db.query(Chunk).filter(Chunk.document_id == document_id).count()
+
     # 返回格式化的文档信息
     from RagFlow.models.document import format_document_response
-    return format_document_response(document)
+    return format_document_response(document, actual_chunk_count=actual_chunk_count)
 
 
 @router.get("/{document_id}/download")

@@ -52,8 +52,13 @@ class DocumentResponse(BaseModel):
         from_attributes = True
 
 
-def format_document_response(document: Document) -> dict:
-    """格式化文档响应，添加中文状态和格式化时间"""
+def format_document_response(document: Document, actual_chunk_count: int = None) -> dict:
+    """格式化文档响应，添加中文状态和格式化时间
+
+    Args:
+        document: 文档对象
+        actual_chunk_count: 可选的实际切片数量，如果提供则使用此值而不是数据库中的 chunk_count
+    """
     status_map = {
         "pending": "待处理",
         "processing": "处理中",
@@ -69,10 +74,15 @@ def format_document_response(document: Document) -> dict:
     else:
         formatted_size = f"{document.file_size / (1024 * 1024):.2f} MB"
 
-    # 格式化创建时间（北京时间）
-    from datetime import timedelta
-    beijing_time = document.created_at + timedelta(hours=8)
-    formatted_created_at = beijing_time.strftime("%Y-%m-%d %H:%M:%S")
+    # 格式化创建时间
+    # 数据库返回的时间已经是北京时间（通过数据库时区设置），直接格式化即可
+    if document.created_at:
+        formatted_created_at = document.created_at.strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        formatted_created_at = ""
+
+    # 使用实际切片数量（如果提供），否则使用数据库中的值
+    count = actual_chunk_count if actual_chunk_count is not None else document.chunk_count
 
     return {
         "id": document.id,
@@ -82,7 +92,7 @@ def format_document_response(document: Document) -> dict:
         "file_type": document.file_type,
         "status": document.status,
         "status_text": status_map.get(document.status, "未知状态"),
-        "chunk_count": document.chunk_count,
+        "chunk_count": count,
         "error_message": document.error_message,
         "created_at": document.created_at,
         "updated_at": document.updated_at,

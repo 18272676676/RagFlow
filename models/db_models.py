@@ -116,7 +116,7 @@ class Chunk(Base):
 
     id = Column(Integer, primary_key=True, index=True, comment="切片 ID")
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, comment="所属文档 ID")
-    chunk_index = Column(Integer, nullable=False, comment="切片序号")
+    chunk_index = Column(Integer, nullable=False, comment="切片索引（从0开始）")
     chunk_text = Column(Text, nullable=False, comment="切片文本内容")
     created_at = Column(DateTime, server_default=func.now(), comment="创建时间")
 

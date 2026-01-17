@@ -24,9 +24,6 @@ from RagFlow.core.logger import get_logger
 
 logger = get_logger(__name__)
 
-# 北京时区（UTC+8）
-BEIJING_TZ = timezone(timedelta(hours=8))
-
 
 class QAService:
     """问答服务"""
@@ -148,7 +145,7 @@ class QAService:
                 prompt_tokens=llm_response.prompt_tokens,
                 completion_tokens=llm_response.completion_tokens,
                 total_tokens=llm_response.total_tokens,
-                created_at=datetime.now(BEIJING_TZ),
+                created_at=datetime.now(),  # 数据库连接已设置时区，使用服务器时间
                 answer_source=answer_source
             )
 
