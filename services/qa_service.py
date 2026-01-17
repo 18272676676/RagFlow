@@ -62,7 +62,8 @@ class QAService:
         self,
         request: QARequest,
         request_id: str,
-        db: Session
+        db: Session,
+        knowledge_base_id: int = None
     ) -> QAResponse:
         """
         回答用户问题
@@ -71,17 +72,19 @@ class QAService:
             request: 问答请求
             request_id: 请求 ID
             db: 数据库会话
+            knowledge_base_id: 知识库 ID（可选，如果指定则只从该知识库检索）
 
         Returns:
             问答响应
         """
         try:
-            logger.info(f"开始处理问答，request_id: {request_id}, 问题: {request.question}")
+            logger.info(f"开始处理问答，request_id: {request_id}, 问题: {request.question}, knowledge_base_id: {knowledge_base_id}")
 
             # 1. 检索相关文档
             retrieved_chunks = self.retriever.retrieve(
                 question=request.question,
                 top_k=request.top_k,
+                knowledge_base_id=knowledge_base_id,
                 db=db
             )
 

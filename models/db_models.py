@@ -69,12 +69,14 @@ class Conversation(Base):
 
     id = Column(Integer, primary_key=True, index=True, comment="会话 ID")
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, comment="用户 ID")
+    knowledge_base_id = Column(Integer, ForeignKey("knowledge_bases.id"), nullable=True, comment="关联的知识库 ID")
     title = Column(String(200), nullable=False, default="新对话", comment="会话标题")
     created_at = Column(DateTime, server_default=func.now(), comment="创建时间")
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), comment="更新时间")
 
     # 关系
     user = relationship("User", back_populates="conversations")
+    knowledge_base = relationship("KnowledgeBase", backref="conversations")
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
     qa_logs = relationship("QALog", back_populates="conversation", cascade="all, delete-orphan")
 

@@ -99,6 +99,7 @@ async def ask_question(
 
     # 如果提供了会话ID，验证会话是否存在
     conversation = None
+    knowledge_base_id = None
     if conversation_id:
         conversation = db.query(Conversation).filter(
             Conversation.id == conversation_id,
@@ -106,18 +107,26 @@ async def ask_question(
         ).first()
         if not conversation:
             raise HTTPException(status_code=404, detail="会话不存在")
+        knowledge_base_id = conversation.knowledge_base_id
 
     try:
         # 调用问答服务
         response = await _qa_service.ask(
             request=request,
             request_id=request_id,
-            db=db
+            db=db,
+            knowledge_base_id=knowledge_base_id
         )
 
         # 保存消息到会话
         if conversation:
             conv_id = conversation.id  # 使用 conversation 对象的 id
+
+            # 检查是否是第一条消息
+            message_count = db.query(Message).filter(
+                Message.conversation_id == conv_id
+            ).count()
+
             user_message = Message(
                 conversation_id=conv_id,
                 role="user",
@@ -132,6 +141,13 @@ async def ask_question(
                 content=response.answer
             )
             db.add(assistant_message)
+
+            # 如果是第一条消息，更新对话标题为问题内容
+            if message_count == 0:
+                # 截取前30个字符作为标题
+                title = request.question[:30] + ("..." if len(request.question) > 30 else "")
+                conversation.title = title
+
             db.commit()
         else:
             logger.info(f"没有提供 conversation_id，消息未保存到会话")

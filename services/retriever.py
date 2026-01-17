@@ -64,6 +64,7 @@ class Retriever:
         self,
         question: str,
         top_k: int = 5,
+        knowledge_base_id: int = None,
         db: Session = None
     ) -> List[RetrievedChunk]:
         """
@@ -72,6 +73,7 @@ class Retriever:
         Args:
             question: 用户问题
             top_k: 返回前 K 个结果
+            knowledge_base_id: 知识库 ID（可选，如果指定则只从该知识库检索）
             db: 数据库会话（用于获取文件名）
 
         Returns:
@@ -116,10 +118,13 @@ class Retriever:
                 logger.warning("没有有效的 document_id")
                 return []
 
-            # 查询文档信息
-            documents = db.query(Document).filter(
-                Document.id.in_(document_ids)
-            ).all()
+            # 构建查询，如果指定了 knowledge_base_id，则只查询该知识库的文档
+            query = db.query(Document).filter(Document.id.in_(document_ids))
+            if knowledge_base_id is not None:
+                query = query.filter(Document.knowledge_base_id == knowledge_base_id)
+                logger.info(f"限制检索知识库: {knowledge_base_id}")
+
+            documents = query.all()
 
             logger.info(f"查询到 {len(documents)} 个文档记录")
 
