@@ -28,7 +28,7 @@ engine: Engine = create_engine(
     echo=False,  # 是否输出 SQL 日志（调试时启用）
     connect_args={
         "charset": "utf8mb4",
-        "init_command": "SET time_zone = '+08:00'"  # 设置时区为北京时间（UTC+8）
+        "init_command": f"SET time_zone = '{settings.DB_TIMEZONE}'"  # 设置时区为北京时间（UTC+8）
     }
 )
 

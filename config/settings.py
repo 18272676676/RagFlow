@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     DB_USER: str = "root"
     DB_PASSWORD: str = "Weida&6676"
     DB_NAME: str = "rag_knowledge_base"
+    DB_TIMEZONE: str = "+08:00"  # 数据库时区（北京时间 UTC+8）
 
     # ==================== DeepSeek API 配置 ====================
     DEEPSEEK_API_BASE: str = "https://api.deepseek.com/v1/chat/completions"
@@ -63,7 +64,7 @@ class Settings(BaseSettings):
     MINIO_SECRET_KEY: str = "minioadmin123"
     MINIO_BUCKET_NAME: str = "rag-documents"
     MINIO_SECURE: bool = False
-    USE_MINIO: bool = False  # 是否使用MinIO存储 (本地和MinIO服务器网络不通，使用本地存储)
+    USE_MINIO: bool = True  # 是否使用MinIO存储
 
     # ==================== 认证配置 ====================
     SECRET_KEY: str = "your-secret-key-change-in-production-2024"

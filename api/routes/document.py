@@ -19,6 +19,8 @@ from typing import List
 from pathlib import Path
 import uuid
 import io
+from urllib.parse import quote
+import mimetypes
 
 from RagFlow.core.database import get_db
 from RagFlow.core.logger import get_logger, set_request_id
@@ -240,13 +242,21 @@ async def download_document(
     storage_service = get_storage_service()
     try:
         content = await storage_service.download_file(document.file_path)
-        file_stream = io.BytesIO(content)
 
+        # 根据文件扩展名确定MIME类型
+        mime_type, _ = mimetypes.guess_type(document.file_name)
+        if mime_type is None:
+            mime_type = "application/octet-stream"
+
+        # 对中文文件名进行URL编码
+        encoded_filename = quote(document.file_name, safe='')
+
+        # 只使用filename*，避免latin-1编码问题
         return StreamingResponse(
             io.BytesIO(content),
-            media_type="application/octet-stream",
+            media_type=mime_type,
             headers={
-                "Content-Disposition": f"attachment; filename={document.file_name}"
+                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
             }
         )
     except FileNotFoundError:
